@@ -77,29 +77,6 @@ jobs:
           fi
           echo "npm $ver supports the OIDC exchange"
 
-      - name: npm must be 12, because 11 cannot publish a package that does not exist yet
-        run: |
-          # MEASURED ON THIS REPOSITORY, 2026-10-20: with npm 11 the OIDC publish of a package that is not on the
-          # registry yet fails with
-          #   npm error code E404
-          #   npm error 404 Not Found - PUT https://registry.npmjs.org/dsh-session-rows - Not found
-          #   npm error 404 The requested resource 'dsh-session-rows@0.2.0' could not be found or you do not have
-          #   permission to access it.
-          # which is npm saying that there is no trusted publisher for a package it has never heard of -- the
-          # trusted-publisher configuration LIVES on the package's page, so a package that does not exist has no
-          # configuration to find. npm 12 is the release that added `npm stage`, which defers the 2FA
-          # proof-of-presence to a later step, and it is the release that can carry a FIRST publish. So the runner
-          # is put on npm 12 here rather than at the publish step, where the failure would be a 404 that reads like
-          # a permissions problem and is not one.
-          npm install -g npm@latest
-          ver=$(npm --version)
-          major=${ver%%.*}
-          if [ "$major" -lt 12 ]; then
-            echo "::error::npm $ver is too old to stage a first publish; needs >= 12"
-            exit 1
-          fi
-          echo "npm $ver can carry a first publish"
-
       - name: Install from the lockfile
         run: npm ci
 
@@ -148,6 +125,46 @@ jobs:
             exit 1
           fi
           echo "the tarball carries exactly the package and its fixture"
+
+      - name: Switch to a node that npm 12 supports
+        uses: actions/setup-node@v4
+        with:
+          # THE PUBLISH RUNS ON A DIFFERENT NODE FROM THE SUITE, and the reason is measured rather than chosen. npm
+          # 12.2.0 declares `engines.node: ^22.22.2 || ^24.15.0 || >=26.0.0` -- node 25 is NOT in that set, and
+          # node 25 is what this repository runs its suite on, because the coverage floor was measured there. So
+          # the two are separated rather than compromised: the suite runs where the floor was measured, and the
+          # publish runs where npm 12 can be installed at all.
+          node-version: '26'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: npm must be 12, because 11 cannot publish a package that does not exist yet
+        run: |
+          # MEASURED ON THIS REPOSITORY, 2026-10-20: with npm 11 the OIDC publish of a package that is not on the
+          # registry yet fails with
+          #   npm error code E404
+          #   npm error 404 Not Found - PUT https://registry.npmjs.org/dsh-session-rows - Not found
+          #   npm error 404 The requested resource 'dsh-session-rows@0.2.0' could not be found or you do not have
+          #   permission to access it.
+          # which is npm saying that there is no trusted publisher for a package it has never heard of -- the
+          # trusted-publisher configuration LIVES on the package's page, so a package that does not exist has no
+          # configuration to find. npm 12 is the release that added `npm stage`, which defers the 2FA
+          # proof-of-presence to a later step, and it is the release that can carry a FIRST publish. So the runner
+          # is put on npm 12 here rather than at the publish step, where the failure would be a 404 that reads like
+          # a permissions problem and is not one.
+          #
+          # AND MEASURED, AGAIN: npm 12 cannot be installed on node 25 at all --
+          #   npm error notsup Required: {"node":"^22.22.2 || ^24.15.0 || >=26.0.0"}
+          #   npm error notsup Actual:   {"node":"v25.9.0","npm":"11.12.1"}
+          # -- which is why the step above changes node rather than this step changing a version.
+          npm install -g npm@latest
+          ver=$(npm --version)
+          major=${ver%%.*}
+          if [ "$major" -lt 12 ]; then
+            echo "::error::npm $ver is too old to stage a first publish; needs >= 12"
+            exit 1
+          fi
+          echo "npm $ver can carry a first publish"
 
       - name: Publish dsh-session-rows
         run: |
