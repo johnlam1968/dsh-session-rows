@@ -1,0 +1,39 @@
+{
+  "name": "dsh-session-rows",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The rules every producer of session rows must obey -- the vocabulary, the text rules, the source rule -- and the conformance fixture that pins them. Imports no dsh code and no harness code.",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "prepublishOnly": "npm run ci",
+    "test": "node --test test/*.test.js",
+    "coverage": "node --experimental-test-coverage --test --test-coverage-include='index.js' --test-coverage-lines=85 --test-coverage-branches=75 --test-coverage-functions=75 test/*.test.js",
+    "ci": "npm test && npm run coverage"
+  },
+  "files": [
+    "index.js",
+    "fixture/**",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "session",
+    "rows",
+    "contract",
+    "conformance",
+    "fixture",
+    "harness-free"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
