@@ -77,6 +77,29 @@ jobs:
           fi
           echo "npm $ver supports the OIDC exchange"
 
+      - name: npm must be 12, because 11 cannot publish a package that does not exist yet
+        run: |
+          # MEASURED ON THIS REPOSITORY, 2026-10-20: with npm 11 the OIDC publish of a package that is not on the
+          # registry yet fails with
+          #   npm error code E404
+          #   npm error 404 Not Found - PUT https://registry.npmjs.org/dsh-session-rows - Not found
+          #   npm error 404 The requested resource 'dsh-session-rows@0.2.0' could not be found or you do not have
+          #   permission to access it.
+          # which is npm saying that there is no trusted publisher for a package it has never heard of -- the
+          # trusted-publisher configuration LIVES on the package's page, so a package that does not exist has no
+          # configuration to find. npm 12 is the release that added `npm stage`, which defers the 2FA
+          # proof-of-presence to a later step, and it is the release that can carry a FIRST publish. So the runner
+          # is put on npm 12 here rather than at the publish step, where the failure would be a 404 that reads like
+          # a permissions problem and is not one.
+          npm install -g npm@latest
+          ver=$(npm --version)
+          major=${ver%%.*}
+          if [ "$major" -lt 12 ]; then
+            echo "::error::npm $ver is too old to stage a first publish; needs >= 12"
+            exit 1
+          fi
+          echo "npm $ver can carry a first publish"
+
       - name: Install from the lockfile
         run: npm ci
 
@@ -134,7 +157,16 @@ jobs:
           else
             if [[ "$ver" == *-* ]]; then tag=beta; else tag=latest; fi
             echo "publishing ${ver} with dist-tag ${tag}"
-            npm publish --provenance --access public --tag "$tag"
+            # `npm publish` first. If npm STAGES it instead of publishing it -- which is what the 2FA flow does
+            # when the proof-of-presence has not happened yet -- the step still exits 0 and the installability check
+            # below is what notices. And if it FAILS, the fallback is `npm stage publish`, which is the same
+            # publish with the proof-of-presence deferred instead of demanded.
+            if ! npm publish --provenance --access public --tag "$tag"; then
+              echo "::notice::npm publish failed; trying the staged path, which defers the 2FA proof-of-presence"
+              npm stage publish "dsh-session-rows@${ver}" --tag "$tag" --provenance --access public
+            fi
+            echo "--- what npm holds for this version ---"
+            npm stage list "dsh-session-rows@${ver}" 2>&1 || true
           fi
 
       - name: Every version published must be INSTALLABLE, because a staged publish is not a release
