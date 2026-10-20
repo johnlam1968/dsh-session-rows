@@ -25,6 +25,15 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johnlam1968/dsh-session-rows.git"
+  },
+  "homepage": "https://github.com/johnlam1968/dsh-session-rows#readme",
+  "bugs": {
+    "url": "https://github.com/johnlam1968/dsh-session-rows/issues"
+  },
+  "author": "John Lam <jwebster@gmail.com>",
   "keywords": [
     "session",
     "rows",
