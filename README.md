@@ -26,6 +26,7 @@ than by reading either of them. So the rules live here, in one place, and a **fi
 | `visibleText(content)` | the whole text rule: only a `text` block is text, a string body is text, the text is trimmed, and no NUL byte |
 | `reasoningText(content)` | the reasoning rule: only a `reasoning` block, joined by a newline, and never in the visible text |
 | `sourceKindOf`, `isUserMessage`, `isHumanMessage` | the source rule: the event type does not say who spoke |
+| `exchangeIndexOf(records)` | **rule 1** of the contract: the ask-group index of a record stream, by position — the boundary is where the human spoke, never a native `turn` |
 | `readFixture()`, `fixtureDigest()`, `digestOf(root)` | the conformance fixture and its digest |
 
 **What is NOT in here:** the consumer side. What an instrument does with the rows — the segmentation, the summary, the

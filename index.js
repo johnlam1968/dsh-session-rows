@@ -91,24 +91,44 @@ export function visibleText(content) {
 }
 
 /**
- * THE REASONING of a message, joined with a newline, trimmed, and NUL-free.
+ * THE REASONING of a message, joined with a newline, trimmed, and NUL-free -- OR `null` WHEN THERE IS NONE.
  *
  * A NEWLINE AND NOT NOTHING, because the two producers used to join the same blocks differently and the composed
  * state -- what a measurement's `stateHash` is made of -- differed. The reasoning is NOT included in the visible text:
  * the judge has never been given it, and folding it in now would change what every reading means. Whoever gives
  * reasoning to the judge decides that, in one place.
  *
+ * **AND `null` FOR THE ABSENCE, WHICH IS THE ROW'S FORM.** A row says "there was no reasoning" with `null`, never
+ * with `''` and never with an absent key: an empty string is indistinguishable from an answer that was genuinely
+ * empty, and a missing key is indistinguishable from a reader that never looked. `reasoningText` below is the same
+ * rule in the TEXT's form, and a producer that writes a ROW must use THIS one -- otherwise the rule lives nowhere but
+ * in the two producers that patch the value after the fact.
+ *
  * @param {unknown} content
- * @returns {string}  the empty string when there is no reasoning
+ * @returns {string|null}  the reasoning, or null when there is none
  */
-export function reasoningText(content) {
-    if (typeof content === 'string') return ''
-    if (!Array.isArray(content)) return ''
-    return withoutNuls(content
+export function reasoningOf(content) {
+    if (typeof content === 'string') return null
+    if (!Array.isArray(content)) return null
+    const text = withoutNuls(content
         .filter((block) => block !== null && typeof block === 'object' && block.type === 'reasoning' && typeof block.text === 'string')
         .map((block) => block.text)
         .join('\n')
         .trim())
+    return text === '' ? null : text
+}
+
+/**
+ * THE REASONING of a message as TEXT, and the empty string when there is none.
+ *
+ * The TEXT's form of the rule above, for a caller that wants the string and not the row's value. A producer of a
+ * row wants `reasoningOf`, because a row carries `null` for the absence.
+ *
+ * @param {unknown} content
+ * @returns {string}  the empty string when there is no reasoning
+ */
+export function reasoningText(content) {
+    return reasoningOf(content) ?? ''
 }
 
 /** The `source.kind` a DIRECT HUMAN prompt carries. The other kinds are the harness speaking on the same channel. */
@@ -152,6 +172,80 @@ export function isUserMessage(event) {
  */
 export function isHumanMessage(event) {
     return isUserMessage(event) && sourceKindOf(event) === HUMAN_SOURCE_KIND
+}
+
+/**
+ * THE ASK-GROUP INDEX of a record stream: which ask-group each record belongs to, BY POSITION.
+ *
+ * RULE 1 OF THE ROWS CONTRACT, and the reason the contract refuses a native `turn`: **the boundary is an ask-group,
+ * derived from where the human spoke, and never a harness's own turn.** pi has no turn at all -- every pi message
+ * in the surveyed corpus carried a null turn -- so a producer that keys on `turn` produces a query that looks
+ * cross-harness and silently answers for one harness only.
+ *
+ * THE RULE IN THREE LINES. Each HUMAN message opens a group; everything after it belongs to that group until the
+ * next human message. The human is `isHumanMessage`, not "a `user/message`" -- the harness speaks on the same
+ * channel (a goal, a skill catalogue, a runtime context), and counting the type rather than the speaker opened an
+ * ask-group for every injection: 753 groups where there are 403, on one real session.
+ *
+ * THE LEADING RUN before the first human message belongs to the FIRST group rather than to a group of its own: a
+ * session that opens with narration has not asked anything yet, and a group numbered -1 is a key no query knows how
+ * to select.
+ *
+ * WHY IT LIVES HERE AND NOT IN EACH PRODUCER. It is a rule about what a row MEANS, and it is the one rule a third
+ * producer would otherwise restate: a pi producer that re-derived the grouping would be a third copy of the rule
+ * that decides where a conversation turns.
+ *
+ * @param {object[]} records  the record stream, in order
+ * @returns {number[]} one group index per record, by position
+ */
+export function exchangeIndexOf(records) {
+    const list = Array.isArray(records) ? records : []
+    const index = []
+    let ordinal = -1
+    for (const record of list) {
+        if (isHumanMessage(record)) ordinal += 1
+        index.push(Math.max(ordinal, 0))
+    }
+    return index
+}
+
+/**
+ * THE SURFACE: the records that remain visible, in order.
+ *
+ * RULE 2 OF THE ROWS CONTRACT, and the reason a row carries a `shadowed` flag: **the log holds what the session ever
+ * wrote; the model saw only what survived.** A record inside a replaced span is one the model cannot see, and a
+ * producer that defaulted `shadowed` to `false` would produce a session that looks complete and measures text nobody
+ * could read -- measured at 3,417 such messages in a single dsh session.
+ *
+ * THE OP, READ FROM THE DECLARATION rather than inferred: `surfaceOp: 'append' | { op: 'replace'; startSeq; endSeq }`.
+ * Only `replace` removes anything; every other record is appended and stays. The ranges are INCLUSIVE at both ends,
+ * and a replacement's own record carries a seq OUTSIDE its own range -- which is what makes the summary that replaces
+ * a history the surfaced message rather than a casualty of its own replacement.
+ *
+ * WHY IT LIVES HERE AND NOT IN EACH PRODUCER. It decides what a row MEANS, and it is the rule a third producer would
+ * otherwise restate. A substrate that withdraws records -- a compaction, a context edit -- says so with a `surfaceOp`,
+ * and every producer then agrees on which records the model could see.
+ *
+ * @param {object[]} records  the record stream, in order
+ * @returns {object[]} the records that remain on the surface
+ */
+export function surfaceEvents(records) {
+    const list = Array.isArray(records) ? records : []
+    const replaced = []
+    for (const record of list) {
+        const op = record?.surfaceOp
+        if (op === null || typeof op !== 'object') continue
+        if (op.op !== 'replace') continue
+        if (typeof op.startSeq !== 'number' || typeof op.endSeq !== 'number') continue
+        replaced.push([op.startSeq, op.endSeq])
+    }
+    // The common case costs nothing: no replacement means the log IS the surface.
+    if (replaced.length === 0) return list
+    return list.filter((record) => {
+        const seq = record?.seq
+        if (typeof seq !== 'number') return true
+        return !replaced.some(([start, end]) => seq >= start && seq <= end)
+    })
 }
 
 /** The directory this package was loaded from, so the fixture is found without a path from the caller. */
