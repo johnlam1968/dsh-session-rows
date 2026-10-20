@@ -178,12 +178,47 @@ jobs:
             # when the proof-of-presence has not happened yet -- the step still exits 0 and the installability check
             # below is what notices. And if it FAILS, the fallback is `npm stage publish`, which is the same
             # publish with the proof-of-presence deferred instead of demanded.
+            #
+            # AND THE STAGED FALLBACK TAKES **NO PACKAGE SPEC**, and that is not a style choice. MEASURED: npm 12.2.0
+            # with a spec resolves the package FROM THE REGISTRY instead of packing the working directory, and a
+            # package that does not exist there is a 404 --
+            #   A: npm stage publish --dry-run            -> packs the CWD, proceeds
+            #   B: npm stage publish "pkg@0.2.0" --dry-run -> npm error code E404
+            #      404 Not Found - GET https://registry.npmjs.org/<pkg> - Not found
+            # -- and that 404 is the one this repository measured THREE TIMES and read as "npm cannot carry a first
+            # publish". It was the ARGUMENT. npm 12's own documentation says the spec-less form "packs the current
+            # working directory" and that "staged publishing will allow you to create a new package if it does not
+            # exist". So the fallback is the FIRST publish, not a last resort, and the spec is the bug.
             if ! npm publish --provenance --access public --tag "$tag"; then
               echo "::notice::npm publish failed; trying the staged path, which defers the 2FA proof-of-presence"
-              npm stage publish "dsh-session-rows@${ver}" --tag "$tag" --provenance --access public
+              npm stage publish --tag "$tag" --provenance --access public
             fi
             echo "--- what npm holds for this version ---"
             npm stage list "dsh-session-rows@${ver}" 2>&1 || true
+            # AND IF IT IS STAGED, APPROVE IT HERE. The proof-of-presence is the job's OIDC identity, so the job that
+            # staged the release is the job that can approve it -- but a staged release that nobody approves is not a
+            # release, and a GREEN job that only staged is evidence of staging. So the approval is attempted, and if
+            # npm wants a human, the step says so and says exactly which command settles it.
+            stage_id=$(npm stage list "dsh-session-rows@${ver}" --json 2>/dev/null | node -e "
+              let s = ''
+              process.stdin.on('data', (c) => { s += c })
+              process.stdin.on('end', () => {
+                let ids = []
+                try {
+                  const parsed = JSON.parse(s)
+                  for (const entry of (Array.isArray(parsed) ? parsed : (parsed && parsed.staged) ? parsed.staged : [])) {
+                    if (entry && entry.id) ids.push(entry.id)
+                  }
+                } catch { /* not json: leave ids empty and let the fallback command name it */ }
+                process.stdout.write(ids[0] || '')
+              })
+            ")
+            if [ -n "$stage_id" ]; then
+              echo "::notice::a staged release is waiting: ${stage_id}. Approving it."
+              if ! npm stage approve "$stage_id"; then
+                echo "::notice::npm would not approve it unattended; a human has to run: npx npm@latest stage approve ${stage_id}"
+              fi
+            fi
           fi
 
       - name: Every version published must be INSTALLABLE, because a staged publish is not a release
