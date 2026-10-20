@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-rows",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "The rules every producer of session rows must obey -- the vocabulary, the text rules, the source rule -- and the conformance fixture that pins them. Imports no dsh code and no harness code.",
   "main": "./index.js",
