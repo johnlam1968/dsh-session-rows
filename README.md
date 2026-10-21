@@ -1,5 +1,14 @@
 # dsh-session-rows
 
+> **DEPRECATED — THIS PACKAGE IS A SHIM.** The rules live in **`system1-measure/rules`**, the MEASUREMENT's package.
+> The rules were absorbed there **verbatim** — the same bytes, the same fixture, the same digest — because the
+> observer was carrying its own copy of them, and a rule stated twice is a rule that will be changed in one place
+> and not the other.
+>
+> **Move to `system1-measure/rules`.** The store and the pi extension have already moved. This package keeps
+> working on purpose: `npm install` does not follow a rename, and a consumer still asking for
+> `dsh-session-rows@^0.2.0` would get a 404 rather than a deprecation notice if this were deleted.
+
 **The rules every producer of session rows must obey, and the fixture that pins them.**
 
 Two repositories produce the same rows — `dsh-system1-observer` from a session **log**, and `dsh-session-index` from
@@ -15,7 +24,8 @@ That is how they came to disagree:
 | **F180** | **a NUL byte** — `node:sqlite` keeps only the bytes before one, so 67 messages in one session were 11 characters in the index and 100 in the log |
 
 Every one of those was **silent**, and every one was found by *measuring the two channels against each other* rather
-than by reading either of them. So the rules live here, in one place, and a **fixture** says what they produce.
+than by reading either of them. So the rules live in ONE place, and a **fixture** says what they produce. That place is now
+`system1-measure/rules`; this package is the door to it.
 
 ## What is in here
 
